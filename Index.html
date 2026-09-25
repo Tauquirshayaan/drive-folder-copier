@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drive Folder Copier</title>
+<style>
+  :root {
+    --bg: #f4f6f9; --card: #ffffff; --text: #16202c; --muted: #64748b; --faint: #94a3b8;
+    --line: #e2e7ee; --line-soft: #edf0f5;
+    --accent: #1a56db; --accent-hover: #164bc4; --accent-soft: #eaf0fe; --accent-text: #ffffff;
+    --ok: #0f7a5c; --ok-soft: #e9f7f1; --warn: #a15c07; --warn-soft: #fdf3e2; --bad: #c0362c; --bad-soft: #fdedec;
+    --shadow: 0 1px 2px rgba(16,24,40,.04), 0 1px 3px rgba(16,24,40,.06);
+    --shadow-md: 0 4px 10px rgba(16,24,40,.06), 0 2px 4px rgba(16,24,40,.04);
+    --radius: 14px; --radius-sm: 9px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --card: #151b23; --text: #e8edf4; --muted: #9aa8ba; --faint: #6b7789;
+      --line: #262e3a; --line-soft: #1c232d;
+      --accent: #5b8dfb; --accent-hover: #7aa2ff; --accent-soft: #17233f; --accent-text: #0b1220;
+      --ok: #3fcf9e; --ok-soft: #10241d; --warn: #f0ab4f; --warn-soft: #2a2110; --bad: #ff8078; --bad-soft: #2b1614;
+      --shadow: 0 1px 2px rgba(0,0,0,.3); --shadow-md: 0 6px 16px rgba(0,0,0,.35);
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.55 -apple-system, "Segoe UI", Roboto, system-ui, sans-serif;
+         -webkit-font-smoothing: antialiased; }
+  main { max-width: 640px; margin: 0 auto; padding: 36px 18px 64px; }
+
+  .topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+  .mark { width: 38px; height: 38px; flex: none; border-radius: 10px; background: var(--accent);
+          display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow); }
+  .mark svg { width: 20px; height: 20px; }
+  h1 { font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin: 2px 0 0; font-size: 13.5px; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+          padding: 22px; margin-bottom: 16px; box-shadow: var(--shadow); }
+
+  label { display: block; font-weight: 600; font-size: 13.5px; margin: 18px 0 6px; }
+  label:first-of-type { margin-top: 0; }
+  .hint { color: var(--muted); font-size: 12.5px; margin-top: 6px; line-height: 1.5; }
+
+  input[type=text], textarea {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+    background: var(--bg); color: var(--text); font: inherit; font-size: 14px; transition: border-color .12s, box-shadow .12s;
+  }
+  textarea { resize: vertical; min-height: 76px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.6; }
+  input[type=text]:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; }
+  button { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-weight: 600; font-size: 13.5px;
+           padding: 9px 15px; border-radius: var(--radius-sm); cursor: pointer;
+           border: 1px solid var(--line); background: var(--card); color: var(--text); transition: background .12s, border-color .12s, transform .05s; }
+  button:hover:not(:disabled) { border-color: var(--faint); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+  button.ghost { background: transparent; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  button svg { width: 14px; height: 14px; flex: none; }
+
+  .check { display: flex; gap: 10px; align-items: flex-start; margin-top: 18px; font-weight: 600; font-size: 13.5px; cursor: pointer; }
+  .check input { margin-top: 3px; width: 16px; height: 16px; accent-color: var(--accent); }
+  .check .hint { font-weight: 400; margin-top: 4px; }
+
+  .bar-track { height: 6px; border-radius: 99px; background: var(--line-soft); overflow: hidden; margin: 16px 0 14px; }
+  .bar-track > i { display: block; height: 100%; width: 38%; background: var(--accent); border-radius: 99px; }
+  .bar-track.run > i { animation: slide 1.15s ease-in-out infinite; }
+  .bar-track.done > i { width: 100%; animation: none; background: var(--ok); }
+  @keyframes slide { 0% { margin-left: -38%; } 100% { margin-left: 100%; } }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(108px, 1fr)); gap: 10px; }
+  .stat { background: var(--bg); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); padding: 10px 12px; }
+  .stat b { display: block; font-size: 21px; font-weight: 700; letter-spacing: -.01em; }
+  .stat span { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; }
+
+  .msg { display: flex; gap: 8px; align-items: flex-start; padding: 11px 13px; border-radius: var(--radius-sm); margin-top: 14px; font-size: 13.5px; line-height: 1.5; }
+  .msg svg { width: 15px; height: 15px; flex: none; margin-top: 2px; }
+  .msg.err { background: var(--bad-soft); color: var(--bad); }
+  .msg.warn { background: var(--warn-soft); color: var(--warn); }
+  .msg.ok { background: var(--ok-soft); color: var(--ok); }
+  .msg a { font-weight: 600; }
+  .msg .links a { display: block; margin-top: 3px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  ul.issues { margin: 10px 0 0; padding: 10px 12px 10px 28px; font-size: 12.5px; color: var(--muted);
+              max-height: 170px; overflow: auto; background: var(--bg); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); }
+  ul.issues li { margin: 3px 0; }
+
+  .hidden { display: none !important; }
+  small.note { display: block; color: var(--faint); margin-top: 12px; font-size: 12px; }
+  .jobhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .jobhead strong { font-size: 15px; font-weight: 700; }
+  .badge { font-size: 11px; font-weight: 700; color: var(--muted); background: var(--bg); border: 1px solid var(--line-soft);
+           padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
+
+  /* quota strip */
+  .quotabar { display: flex; gap: 8px; flex-wrap: wrap; margin: -6px 0 18px; }
+  .qpill { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--muted);
+           background: var(--card); border: 1px solid var(--line); border-radius: 99px; padding: 5px 11px 5px 5px; }
+  .qpill .qdot { width: 6px; height: 6px; border-radius: 99px; background: var(--ok); flex: none; }
+  .qpill.warn .qdot { background: var(--warn); }
+  .qpill.bad .qdot { background: var(--bad); }
+  .qpill b { color: var(--text); font-weight: 700; }
+  .qtrack { width: 46px; height: 4px; border-radius: 99px; background: var(--line-soft); overflow: hidden; }
+  .qtrack > i { display: block; height: 100%; background: var(--accent); }
+
+  /* meta (rate / bytes) row under job stats */
+  .metarow { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--faint); }
+  .metarow span { display: inline-flex; align-items: center; gap: 4px; }
+
+  /* filters */
+  details#filterBox { margin-top: 18px; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+  details#filterBox summary { cursor: pointer; padding: 10px 13px; font-weight: 600; font-size: 13.5px; list-style: none; display: flex; align-items: center; gap: 6px; }
+  details#filterBox summary::-webkit-details-marker { display: none; }
+  details#filterBox summary::before { content: ''; width: 0; height: 0; border-left: 4px solid var(--faint); border-top: 4px solid transparent; border-bottom: 4px solid transparent; transition: transform .12s; }
+  details#filterBox[open] summary::before { transform: rotate(90deg); }
+  details#filterBox .fbody { padding: 4px 13px 14px; }
+  .filterGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 4px 10px; margin-top: 6px; }
+  .chk { display: flex; align-items: center; gap: 7px; font-weight: 400; font-size: 13px; cursor: pointer; margin: 0; }
+  .chk input { width: 15px; height: 15px; accent-color: var(--accent); margin: 0; }
+  button.danger-ghost { color: var(--bad); }
+  button.danger-ghost:hover:not(:disabled) { border-color: var(--bad); background: var(--bad-soft); }
+
+  /* preview tree */
+  #previewPanel { margin-top: 14px; border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--bg); overflow: hidden; }
+  #previewPanel .phead { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; border-bottom: 1px solid var(--line-soft); }
+  #previewPanel .phead b { font-size: 12.5px; }
+  #previewBody { max-height: 260px; overflow: auto; padding: 8px 10px; font-size: 13px; }
+  ul.tree, ul.tree ul { list-style: none; margin: 0; padding-left: 18px; }
+  ul.tree { padding-left: 2px; }
+  .tnode { padding: 2px 0; }
+  .tnode > .trow { display: flex; align-items: center; gap: 6px; }
+  .ticon { flex: none; color: var(--faint); }
+  .t-folder > .trow .ticon { color: var(--accent); }
+  .tname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tmeta { color: var(--faint); font-size: 11px; margin-left: auto; padding-left: 8px; flex: none; }
+  .tmore { color: var(--faint); font-size: 11.5px; font-style: italic; padding: 2px 0 2px 20px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="topbar">
+    <div class="mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6z" fill="white" fill-opacity=".92"/>
+        <path d="M8 15l2.2-2.6L12 14l3-3.6L18 15" stroke="#1a56db" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div>
+      <h1>Drive Folder Copier</h1>
+      <p class="sub">Copy shared folders - with every subfolder - straight into your own Drive.</p>
+    </div>
+  </div>
+
+  <div class="quotabar" id="quotaBar"></div>
+
+  <!-- New job form -->
+  <section class="card" id="formCard">
+    <label for="src">Folder(s) to copy (link or ID, one per line)</label>
+    <textarea id="src" rows="3" placeholder="https://drive.google.com/drive/folders/1aBc...&#10;https://drive.google.com/drive/folders/2xYz... (add more to copy several at once)" autocomplete="off"></textarea>
+    <div class="hint">Paste one link, or several - one per line - to copy multiple folders in the same job. Each must be shared with the Google account you are signed in with now.</div>
+
+    <div class="row" style="margin-top:10px">
+      <button class="ghost" id="previewBtn" type="button">
+        <svg viewBox="0 0 16 16" fill="none"><path d="M1 8s2.7-5 7-5 7 5 7 5-2.7 5-7 5-7-5-7-5z" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.3"/></svg>
+        Preview folder tree
+      </button>
+    </div>
+    <div id="previewPanel" class="hidden">
+      <div class="phead"><b id="previewTitle">Preview</b><span class="badge" id="previewBadge"></span></div>
+      <div id="previewBody"></div>
+    </div>
+
+    <details id="filterBox">
+      <summary>Skip certain file types (optional)</summary>
+      <div class="fbody">
+        <div class="filterGrid">
+          <label class="chk"><input type="checkbox" id="fVideos"> Videos</label>
+          <label class="chk"><input type="checkbox" id="fImages"> Images</label>
+          <label class="chk"><input type="checkbox" id="fAudio"> Audio</label>
+          <label class="chk"><input type="checkbox" id="fPdf"> PDFs</label>
+          <label class="chk"><input type="checkbox" id="fGDocs"> Google Docs / Sheets / Slides</label>
+          <label class="chk"><input type="checkbox" id="fArchives"> Archives (zip, rar, 7z...)</label>
+        </div>
+        <label for="fExt" style="margin-top:10px">Also skip these extensions</label>
+        <input type="text" id="fExt" placeholder="e.g. psd, ai, exe (comma-separated)" autocomplete="off">
+        <div class="hint">Matching files are skipped entirely - not copied, not counted as an error.</div>
+      </div>
+    </details>
+
+    <label class="check" for="merge">
+      <input type="checkbox" id="merge">
+      <span>Merge into a folder I already have<div class="hint">Only copies files that are missing. Use this to bring in new files added to the original later, or to avoid a second full copy. Works with one folder at a time.</div></span>
+    </label>
+
+    <label for="dest" id="destLabel">Copy into (optional)</label>
+    <input type="text" id="dest" placeholder="Leave empty for the top level of My Drive" autocomplete="off">
+    <div class="hint" id="destHint">Paste the link of a folder in your Drive if you want the copy inside it.</div>
+
+    <div id="suffixBox">
+      <label for="suffix">Add to the new folder's name</label>
+      <input type="text" id="suffix" value=" (Copy)" autocomplete="off">
+    </div>
+    <div class="hint hidden" id="mergeHint">Files are matched by name. A file that was edited in place, or one that exists under a different name, is not updated. Nothing in your folder is ever deleted or overwritten.</div>
+
+    <div class="row"><button class="primary" id="startBtn">
+      <svg viewBox="0 0 16 16" fill="none"><path d="M3 2.5l10 5.5-10 5.5v-11z" fill="currentColor"/></svg>
+      Start copying
+    </button></div>
+    <div id="formMsg"></div>
+  </section>
+
+  <!-- Progress -->
+  <section class="card hidden" id="jobCard">
+    <div class="jobhead">
+      <strong id="jobTitle">Copying</strong>
+      <span class="badge hidden" id="jobBadge"></span>
+    </div>
+    <div class="bar-track run" id="bar"><i></i></div>
+    <div class="stats">
+      <div class="stat"><b id="sFiles">0</b><span>Files copied</span></div>
+      <div class="stat hidden" id="skipBox"><b id="sSkipped">0</b><span>Already there</span></div>
+      <div class="stat hidden" id="filterBoxStat"><b id="sFiltered">0</b><span>Filtered out</span></div>
+      <div class="stat"><b id="sFolders">0</b><span>Folders finished</span></div>
+      <div class="stat"><b id="sQueue">0</b><span>Folders waiting</span></div>
+    </div>
+    <div class="metarow hidden" id="metaStats">
+      <span id="mRate"></span>
+      <span id="mBytes"></span>
+    </div>
+    <div id="jobMsg"></div>
+    <div class="row" id="jobButtons">
+      <button id="pauseBtn">Pause</button>
+      <button class="primary hidden" id="resumeBtn">Resume</button>
+      <button id="bgBtn">Keep going with the tab closed</button>
+      <button id="cancelBtn" title="Stop this job and go back to the form to copy a different folder">Stop</button>
+      <button class="primary hidden" id="newBtn">Copy another folder</button>
+      <button class="hidden danger-ghost" id="deleteBtn" title="Move the folder(s) this job created to Trash (recoverable for 30 days)">Delete this copy</button>
+    </div>
+    <small class="note" id="jobNote">Keep this tab open while copying. Large folders can take a while; you can pause and resume at any time.</small>
+    <ul class="issues hidden" id="issues"></ul>
+  </section>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const call = (fn, ...args) => new Promise((resolve, reject) => {
+    google.script.run.withSuccessHandler(resolve).withFailureHandler(reject)[fn](...args);
+  });
+  const errText = (e) => (e && e.message ? e.message : String(e)).replace(/^Error:\s*/, '');
+  const parseLines = (raw) => raw.split(/[\n,]+/).map((s) => s.trim()).filter(Boolean);
+  const formatNum = (n) => Number(n || 0).toLocaleString();
+  function formatBytes(n) {
+    if (!n) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0, v = n;
+    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+    return (v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v.toFixed(2)) + ' ' + units[i];
+  }
+
+  // ---- quota strip (requests used today + Drive storage) ----
+  const REQ_LIMITS = { personal: 20000, workspace: 100000 };
+  let acctType = 'personal', lastReqUsed = 0, storageInfo = null;
+
+  function renderQuota() {
+    const bar = $('quotaBar'); bar.innerHTML = '';
+    const limit = REQ_LIMITS[acctType];
+    const pct = Math.min(100, Math.round((lastReqUsed / limit) * 100));
+
+    const p1 = document.createElement('span');
+    p1.className = 'qpill' + (pct >= 90 ? ' bad' : pct >= 60 ? ' warn' : '');
+    p1.title = "Apps Script's daily request limit. Counted from UTC midnight as an approximation of Google's own ~24h rolling reset.";
+    p1.innerHTML = '<span class="qdot"></span>';
+    const t1 = document.createElement('span'); t1.innerHTML = '<b>' + formatNum(lastReqUsed) + '</b> / ' + formatNum(limit) + ' requests today';
+    p1.appendChild(t1);
+    bar.appendChild(p1);
+
+    const acct = document.createElement('button'); acct.type = 'button'; acct.className = 'qpill'; acct.style.cursor = 'pointer';
+    acct.innerHTML = '<span class="qdot" style="background:var(--faint)"></span>';
+    const t2 = document.createElement('span'); t2.textContent = acctType === 'workspace' ? 'Workspace account (100k/day) - tap to switch' : 'Personal account (20k/day) - tap to switch';
+    acct.appendChild(t2);
+    acct.onclick = () => { acctType = acctType === 'workspace' ? 'personal' : 'workspace'; renderQuota(); };
+    bar.appendChild(acct);
+
+    if (storageInfo && storageInfo.usage != null) {
+      const used = storageInfo.usage, lim = storageInfo.limit;
+      const spct = lim ? Math.min(100, Math.round((used / lim) * 100)) : 0;
+      const p2 = document.createElement('span');
+      p2.className = 'qpill' + (lim && spct >= 90 ? ' bad' : lim && spct >= 75 ? ' warn' : '');
+      p2.innerHTML = '<span class="qdot"></span>';
+      const t3 = document.createElement('span');
+      t3.textContent = 'Storage: ' + formatBytes(used) + (lim ? ' / ' + formatBytes(lim) : ' used (unlimited)');
+      p2.appendChild(t3);
+      if (lim) {
+        const track = document.createElement('span'); track.className = 'qtrack';
+        const i = document.createElement('i'); i.style.width = spct + '%'; track.appendChild(i);
+        p2.appendChild(track);
+      }
+      bar.appendChild(p2);
+    }
+  }
+  async function refreshStorage() {
+    try { storageInfo = await call('api_storage'); renderQuota(); } catch (e) { /* not critical */ }
+  }
+
+  const SVG_NS = 'http://www.w3.org/2000/svg';
+  const ICON_D = {
+    folder: 'M1 3a1 1 0 0 1 1-1h3l1.4 1.4H14a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V3z',
+    file: 'M3 1h6.2L13 4.8V15a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1zM9 1v4h4',
+    shortcut: 'M3 8h9M8 4.5L12.5 8 8 11.5'
+  };
+  function icon(kind) {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 16 16'); svg.setAttribute('width', '13'); svg.setAttribute('height', '13'); svg.classList.add('ticon');
+    const p = document.createElementNS(SVG_NS, 'path');
+    p.setAttribute('d', ICON_D[kind] || ICON_D.file);
+    if (kind === 'shortcut') { p.setAttribute('fill', 'none'); p.setAttribute('stroke', 'currentColor'); p.setAttribute('stroke-width', '1.3'); p.setAttribute('stroke-linecap', 'round'); p.setAttribute('stroke-linejoin', 'round'); }
+    else { p.setAttribute('fill', 'currentColor'); }
+    svg.appendChild(p);
+    return svg;
+  }
+
+  function renderTreeNode(node, parentUl) {
+    const li = document.createElement('li');
+    li.className = 'tnode t-' + node.type;
+    const row = document.createElement('div');
+    row.className = 'trow';
+    row.appendChild(icon(node.type));
+    const name = document.createElement('span');
+    name.className = 'tname'; name.textContent = node.name;
+    row.appendChild(name);
+    if (node.type === 'folder') {
+      const meta = document.createElement('span');
+      meta.className = 'tmeta';
+      meta.textContent = node.folders + (node.folders === 1 ? ' folder, ' : ' folders, ') + node.files + (node.files === 1 ? ' file' : ' files');
+      row.appendChild(meta);
+    }
+    li.appendChild(row);
+    if (node.type === 'folder' && node.children && node.children.length) {
+      const ul = document.createElement('ul');
+      node.children.forEach((c) => renderTreeNode(c, ul));
+      li.appendChild(ul);
+    }
+    if (node.type === 'folder' && node.truncated) {
+      const more = document.createElement('div');
+      more.className = 'tmore'; more.textContent = 'more not shown (preview only goes so deep/wide)...';
+      li.appendChild(more);
+    }
+    parentUl.appendChild(li);
+  }
+
+  $('previewBtn').onclick = async () => {
+    const lines = parseLines($('src').value);
+    if (!lines.length) { setMsg($('formMsg'), 'Paste at least one folder link or ID first.', 'err'); return; }
+    const btn = $('previewBtn');
+    btn.disabled = true; const oldLabel = btn.lastChild.textContent; btn.lastChild.textContent = ' Loading preview...';
+    try {
+      const roots = await call('api_preview', $('src').value);
+      const panel = $('previewPanel'); const body = $('previewBody');
+      body.innerHTML = '';
+      const ul = document.createElement('ul'); ul.className = 'tree';
+      roots.forEach((r) => renderTreeNode(r, ul));
+      body.appendChild(ul);
+      const totalFiles = roots.reduce((n, r) => n + r.files, 0);
+      const anyTruncated = roots.some((r) => r.truncated) || roots.some((r) => (r.children || []).some((c) => c.type === 'folder' && c.truncated));
+      $('previewTitle').textContent = roots.length > 1 ? roots.length + ' folders previewed' : 'Preview: ' + roots[0].name;
+      $('previewBadge').textContent = anyTruncated ? 'partial - large folder' : 'complete';
+      panel.classList.remove('hidden');
+      setMsg($('formMsg'), '', '');
+    } catch (e) {
+      setMsg($('formMsg'), errText(e), 'err');
+    } finally {
+      btn.disabled = false; btn.lastChild.textContent = oldLabel;
+    }
+  };
+
+  let running = false;
+  let last = null;
+
+  const ICONS = {
+    ok: '<svg viewBox="0 0 16 16" fill="none"><path d="M3 8.5l3 3 7-7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    warn: '<svg viewBox="0 0 16 16" fill="none"><path d="M8 1.5l7 12.5H1L8 1.5z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 6.5v3.2M8 12v.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+    err: '<svg viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/><path d="M8 5v4M8 11v.1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>'
+  };
+
+  function setMsg(el, text, kind) {
+    el.innerHTML = '';
+    if (!text) return;
+    const d = document.createElement('div');
+    d.className = 'msg ' + (kind || '');
+    if (ICONS[kind]) d.innerHTML = ICONS[kind];
+    const span = document.createElement('span');
+    span.textContent = text;
+    d.appendChild(span);
+    el.appendChild(d);
+  }
+
+  function render(s) {
+    last = s;
+    if (s && typeof s.reqUsedToday === 'number') { lastReqUsed = s.reqUsedToday; renderQuota(); }
+    if (!s || !s.exists) {
+      $('formCard').classList.remove('hidden');
+      $('jobCard').classList.add('hidden');
+      return;
+    }
+    $('formCard').classList.add('hidden');
+    $('jobCard').classList.remove('hidden');
+    $('sFiles').textContent = s.files;
+    $('sFolders').textContent = s.foldersDone;
+    $('sSkipped').textContent = s.skipped || 0;
+    $('skipBox').classList.toggle('hidden', !s.merge);
+    $('sFiltered').textContent = s.filtered || 0;
+    $('filterBoxStat').classList.toggle('hidden', !s.filtered);
+    $('sQueue').textContent = s.queueLen;
+    $('deleteBtn').classList.toggle('hidden', !s.canDelete);
+
+    let showMeta = false;
+    if (!s.done) {
+      if (!render.samples) render.samples = [];
+      render.samples.push({ t: Date.now(), f: s.files });
+      if (render.samples.length > 8) render.samples.shift();
+      if (render.samples.length >= 2) {
+        const a = render.samples[0], b = render.samples[render.samples.length - 1];
+        const dt = (b.t - a.t) / 60000, df = b.f - a.f;
+        const rate = dt > 0 ? Math.max(0, df / dt) : 0;
+        $('mRate').textContent = '≈ ' + (rate >= 10 ? Math.round(rate) : rate.toFixed(1)) + ' files/min';
+        $('mRate').classList.remove('hidden'); showMeta = true;
+      } else { $('mRate').classList.add('hidden'); }
+    } else { $('mRate').classList.add('hidden'); render.samples = []; }
+    if (s.bytes) {
+      $('mBytes').textContent = '≈ ' + formatBytes(s.bytes) + ' copied (binary files only)';
+      $('mBytes').classList.remove('hidden'); showMeta = true;
+    } else { $('mBytes').classList.add('hidden'); }
+    $('metaStats').classList.toggle('hidden', !showMeta);
+
+    const bar = $('bar');
+    bar.className = 'bar-track ' + (s.done ? 'done' : (running ? 'run' : ''));
+    const verb = s.merge ? 'Merging' : 'Copying';
+    const multi = s.jobCount > 1;
+    if (s.done) {
+      $('jobTitle').textContent = multi ? 'Finished: ' + s.jobCount + ' folders copied' : 'Finished: ' + s.srcName;
+    } else if (multi) {
+      $('jobTitle').textContent = verb + ': ' + s.srcName;
+    } else {
+      $('jobTitle').textContent = verb + ': ' + s.srcName + (s.merge && s.destName ? '  →  ' + s.destName : '');
+    }
+    const badge = $('jobBadge');
+    if (multi) { badge.textContent = (s.done ? s.jobCount : s.jobsDone + 1) + ' of ' + s.jobCount; badge.classList.remove('hidden'); }
+    else { badge.classList.add('hidden'); }
+
+    const msg = $('jobMsg');
+    if (s.done) {
+      msg.innerHTML = '';
+      const d = document.createElement('div');
+      d.className = 'msg ' + (s.issueCount ? 'warn' : 'ok');
+      d.innerHTML = ICONS[s.issueCount ? 'warn' : 'ok'];
+      const content = document.createElement('div');
+      const span = document.createElement('span');
+      span.textContent = s.issueCount
+        ? 'Done, but ' + s.issueCount + (s.issuesOverflow ? '+' : '') + ' item(s) could not be copied (listed below, and saved as _copy-report.txt in the affected folder(s)). '
+        : (s.merge ? 'All done. ' + s.files + ' new file(s) copied, ' + (s.skipped || 0) + ' already there. '
+          : 'All done. ' + (multi ? s.files + ' file(s) copied across ' + s.jobCount + ' folders. ' : ''));
+      content.appendChild(span);
+      if (multi) {
+        const list = document.createElement('div'); list.className = 'links';
+        s.roots.forEach((r) => {
+          const a = document.createElement('a');
+          a.href = r.url; a.target = '_blank'; a.rel = 'noopener'; a.textContent = 'Open "' + r.name + '"';
+          list.appendChild(a);
+        });
+        content.appendChild(list);
+      } else {
+        const a = document.createElement('a');
+        a.href = s.rootUrl; a.target = '_blank'; a.rel = 'noopener'; a.textContent = s.merge ? 'Open the folder' : 'Open the new folder';
+        content.appendChild(a);
+      }
+      d.appendChild(content);
+      msg.appendChild(d);
+    } else if (s.fatal) {
+      setMsg(msg, s.fatal, 'err');
+    } else if (s.busy) {
+      setMsg(msg, 'A background run is working on this job right now. Progress will keep updating.', 'warn');
+    } else if (s.bg) {
+      setMsg(msg, 'Background mode is on: the copy continues even if you close this tab. Come back any time to check.', 'ok');
+    } else {
+      setMsg(msg, '');
+    }
+
+    $('pauseBtn').classList.toggle('hidden', s.done || !running);
+    $('resumeBtn').classList.toggle('hidden', s.done || running);
+    $('bgBtn').classList.toggle('hidden', s.done);
+    $('bgBtn').textContent = s.bg ? 'Turn off background mode' : 'Keep going with the tab closed';
+    $('cancelBtn').classList.toggle('hidden', s.done);
+    $('newBtn').classList.toggle('hidden', !s.done);
+    $('jobNote').classList.toggle('hidden', s.done);
+
+    const list = $('issues');
+    list.innerHTML = '';
+    (s.issues || []).forEach((t) => { const li = document.createElement('li'); li.textContent = t; list.appendChild(li); });
+    list.classList.toggle('hidden', !(s.issues && s.issues.length));
+  }
+
+  async function loop() {
+    if (running) return;
+    running = true;
+    let errors = 0;
+    if (last) render(last);
+    while (running) {
+      try {
+        const s = await call('api_step');
+        errors = 0;
+        render(s);
+        if (s.done || s.fatal) break;
+        if (s.busy) await sleep(4000);
+      } catch (e) {
+        errors++;
+        setMsg($('jobMsg'), 'Temporary problem (' + errText(e) + '). Retrying...', 'warn');
+        if (errors >= 10) { setMsg($('jobMsg'), 'Stopped after repeated errors: ' + errText(e) + ' Press Resume to try again.', 'err'); break; }
+        await sleep(Math.min(30000, 2000 * errors));
+      }
+    }
+    running = false;
+    if (last) render(last);
+  }
+
+  $('startBtn').onclick = async () => {
+    const btn = $('startBtn');
+    const lineCount = parseLines($('src').value).length;
+    if ($('merge').checked && lineCount > 1) {
+      setMsg($('formMsg'), 'Merge mode works with one folder at a time - remove the extra links, or turn off merge.', 'err');
+      return;
+    }
+    btn.disabled = true;
+    setMsg($('formMsg'), lineCount > 1 ? 'Checking the folders...' : 'Checking the folder...', '');
+    const filterOpts = {
+      skipVideos: $('fVideos').checked, skipImages: $('fImages').checked, skipAudio: $('fAudio').checked,
+      skipPdf: $('fPdf').checked, skipGoogleDocs: $('fGDocs').checked, skipArchives: $('fArchives').checked,
+      skipExt: $('fExt').value
+    };
+    try {
+      const s = await call('api_start', $('src').value, $('dest').value, $('suffix').value, $('merge').checked, filterOpts);
+      setMsg($('formMsg'), '');
+      render(s);
+      refreshStorage();
+      loop();
+    } catch (e) {
+      setMsg($('formMsg'), errText(e), 'err');
+    } finally {
+      btn.disabled = false;
+    }
+  };
+
+  $('merge').onchange = () => {
+    const m = $('merge').checked;
+    $('destLabel').textContent = m ? 'Existing folder to merge into (required)' : 'Copy into (optional)';
+    $('dest').placeholder = m ? 'https://drive.google.com/drive/folders/... (the folder you already have)' : 'Leave empty for the top level of My Drive';
+    $('destHint').textContent = m ? 'Paste the link of the folder that already holds your earlier copy.' : 'Paste the link of a folder in your Drive if you want the copy inside it.';
+    $('suffixBox').classList.toggle('hidden', m);
+    $('mergeHint').classList.toggle('hidden', !m);
+    $('startBtn').lastChild.textContent = m ? ' Start merging' : ' Start copying';
+  };
+
+  $('pauseBtn').onclick = () => { running = false; };
+  $('newBtn').onclick = async () => {
+    try { render(await call('api_cancel')); } catch (e) { setMsg($('jobMsg'), errText(e), 'err'); }
+  };
+  $('resumeBtn').onclick = async () => {
+    try { if (last && last.fatal) render(await call('api_clearStop')); } catch (e) { /* ignore */ }
+    loop();
+  };
+  $('bgBtn').onclick = async () => {
+    try {
+      const s = await call(last && last.bg ? 'api_disableBackground' : 'api_enableBackground');
+      render(s);
+    } catch (e) { setMsg($('jobMsg'), errText(e), 'err'); }
+  };
+  $('cancelBtn').onclick = async () => {
+    if (!confirm('Stop this job and go back to the form? Nothing is deleted - files already copied stay in your Drive. ' +
+      'To finish copying the rest of this same folder later, use "Merge into a folder I already have" and point it at the partial copy.')) return;
+    running = false;
+    await sleep(300);
+    try { render(await call('api_cancel')); } catch (e) { setMsg($('jobMsg'), errText(e), 'err'); }
+  };
+  $('deleteBtn').onclick = async () => {
+    if (!confirm('Move the folder(s) this job created to Trash? You can restore them from Google Drive’s Trash for 30 days - this does not permanently delete anything.')) return;
+    try { render(await call('api_deleteCopies')); } catch (e) { setMsg($('jobMsg'), errText(e), 'err'); }
+  };
+
+  // Keep the storage figure fresh while a job is actively running; it costs a real
+  // Drive request, so it is not polled on every fast step - only occasionally.
+  setInterval(() => { if (running) refreshStorage(); }, 25000);
+
+  // On load: pick up an existing job (e.g. after closing the tab).
+  (async () => {
+    try {
+      const s = await call('api_status');
+      render(s);
+      refreshStorage();
+      if (s && s.exists && !s.done && !s.fatal) {
+        setMsg($('jobMsg'), 'An unfinished copy was found. Press Resume to continue.', 'warn');
+      }
+    } catch (e) { setMsg($('formMsg'), errText(e), 'err'); }
+  })();
+</script>
+</body>
+</html>
